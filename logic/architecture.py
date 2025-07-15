@@ -47,14 +47,10 @@ class ImageEncoder(nn.Module):
             for param in self.model.parameters():
                 param.requires_grad = False
     
-    def forward(self, x):
-        """
-        Args:
-            x: Input images [batch_size, 3, 224, 224]
-        Returns:
-            features: [batch_size, feature_dim, spatial_size, spatial_size]
-        """
-        return self.features(x)
+    def forward(self, images: torch.Tensor) -> torch.Tensor:
+        """Forward pass returning CNN features in (batch, channels, height, width) format"""
+        features = self.features(images)
+        return features
 
 class AttentionModule(nn.Module):
     """Attention mechanism for focusing on relevant image regions"""
@@ -200,6 +196,28 @@ class LSTMDecoder(nn.Module):
         
         return outputs, attention_weights
 
+    def init_hidden(self, features):
+        # features: [batch_size, feature_dim, spatial_size, spatial_size]
+        batch_size = features.size(0)
+        device = features.device
+        h0 = torch.zeros(self.num_layers, batch_size, self.hidden_dim, device=device)
+        c0 = torch.zeros(self.num_layers, batch_size, self.hidden_dim, device=device)
+        return (h0, c0)
+
+    def step(self, input_token, features, hidden):
+        # input_token: [batch_size]
+        # features: [batch_size, feature_dim, spatial_size, spatial_size]
+        # hidden: (h, c)
+        batch_size = features.size(0)
+        features_flat = features.view(batch_size, self.feature_dim, -1).transpose(1, 2)
+        word_embed = self.embedding(input_token)  # [batch_size, embed_dim]
+        lstm_hidden = hidden[0][-1]  # [batch_size, hidden_dim]
+        context, attn_weights = self.attention(features_flat, lstm_hidden)
+        lstm_input = torch.cat([word_embed, context], dim=1).unsqueeze(1)  # [batch_size, 1, embed_dim + feature_dim]
+        lstm_out, (h, c) = self.lstm(lstm_input, hidden)
+        output = self.fc(self.dropout_layer(lstm_out.squeeze(1)))  # [batch_size, vocab_size]
+        return output, (h, c)
+
 class TransformerDecoder(nn.Module):
     """Transformer-based decoder (alternative to LSTM)"""
     
@@ -340,6 +358,25 @@ class ImageCaptioningModel(nn.Module):
         
         return outputs, attention_weights
 
+    def generate(self, images, max_len=20, start_token=1):
+        """Greedy caption generation for validation/inference with repetition penalty."""
+        features = self.encoder(images)
+        batch_size = images.size(0)
+        device = images.device
+        input_token = torch.full((batch_size,), start_token, dtype=torch.long, device=device)
+        hidden = self.decoder.init_hidden(features) # type: ignore
+        outputs = []
+        prev_token = input_token.clone()
+        for _ in range(max_len):
+            output, hidden = self.decoder.step(input_token, features, hidden) # type: ignore
+            # Penalize repeating the previous token
+            output[range(batch_size), prev_token] -= 1e3
+            outputs.append(output)
+            input_token = output.argmax(dim=-1)
+            prev_token = input_token.clone()
+        outputs = torch.stack(outputs, dim=1)  # [batch_size, max_len, vocab_size]
+        return outputs
+
 class ExplainabilityModule:
     """Module for generating Grad-CAM visualizations"""
     
@@ -380,27 +417,17 @@ class ExplainabilityModule:
                         word_index: int, vocab: Dict[str, int]) -> np.ndarray:
         """
         Generate Grad-CAM heatmap for a specific word in the caption
-        
-        Args:
-            image: [1, 3, 224, 224] - single image
-            caption_tokens: list of token indices
-            word_index: index of the word to explain
-            vocab: vocabulary dictionary
-        Returns:
-            heatmap: [H, W] numpy array
         """
-        if not GRAD_CAM_AVAILABLE:
+        if not GRAD_CAM_AVAILABLE or not hasattr(self, 'cam'):
             print("Grad-CAM not available. Returning dummy heatmap.")
             return np.zeros((224, 224))
         
         # Create a target function that focuses on the specific word
         def target_function(model_output):
-            # For simplicity, we'll use the output at the word_index
-            # In practice, you might want to create a more sophisticated target
             return model_output[:, word_index, :].max()
         
         # Generate heatmap
-        heatmap = self.cam(
+        heatmap = self.cam(  # type: ignore
             input_tensor=image,
             targets=[target_function]
         )
@@ -435,7 +462,7 @@ class ExplainabilityModule:
                 attention_map = weights.reshape(spatial_size, spatial_size)
                 
                 # Upsample to image size
-                attention_map = F.interpolate(
+                attention_map = F.interpolate(  # type: ignore
                     torch.from_numpy(attention_map).unsqueeze(0).unsqueeze(0).float(),
                     size=(224, 224),
                     mode='bilinear',

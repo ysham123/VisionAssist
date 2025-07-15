@@ -7,7 +7,7 @@ import os
 # Add the logic directory to the path
 sys.path.append('logic')
 
-from architecture import (
+from logic.architecture import (
     ImageEncoder, 
     LSTMDecoder, 
     TransformerDecoder, 
