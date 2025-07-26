@@ -44,3 +44,9 @@ urllib3
 Werkzeug
 gevent
 gunicorn
+# Additional dependencies for VisionAssist
+nltk>=3.8
+transformers>=4.20.0
+pytorch-grad-cam>=1.4.0
+pycocoevalcap>=1.2
+psutil>=5.8.0
