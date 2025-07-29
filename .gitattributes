@@ -1,0 +1,2 @@
+Data/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+annotations/*.json filter=lfs diff=lfs merge=lfs -text
