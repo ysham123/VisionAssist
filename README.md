@@ -31,54 +31,69 @@ VisionAssist is an accessible application that uses computer vision and natural 
 
 ### Installation
 
-1. Clone the repository
-   ```bash
-   git clone https://github.com/ysham123/VisionAssist.git
-   cd VisionAssist
-   ```
+1. **Clone and Navigate**:
+```bash
+git clone https://github.com/ysham123/VisionAssist.git
+cd VisionAssist
+```
 
-2. Create and activate a virtual environment
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+2. **Install Dependencies**:
+```bash
+pip install -r requirements.txt
+```
 
-3. Install dependencies
-   ```bash
-   pip install -r requirements.txt
-   ```
+3. **Download NLTK Data** (for text processing):
+```python
+import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
+```
 
-4. Create a `.env` file based on `.env.example`
-   ```bash
-   cp .env.example .env
-   ```
+4. **Start the Server**:
+```bash
+python server.py
+```
 
-5. Run the application
-   ```bash
-   python server.py
-   ```
+5. **Access the Application**:
+   - Open browser to `http://localhost:5000`
+   - Grant camera permissions for real-time capture
 
-6. Open your browser and navigate to http://localhost:5000
+## 🔧 API Documentation
 
-## 🎯 Usage Guide
+### Core Endpoints
 
-### Basic Mode
+#### Image Captioning
+```http
+POST /api/v1/vision/caption
+Content-Type: application/json
 
-1. **Start Camera**: Click the camera button to activate your device's camera
-2. **Capture Image**: Take a snapshot of what you want to understand
-3. **View Caption**: The AI will automatically describe what it sees
-4. **Ask Questions**: Type or speak questions about the image
-5. **Toggle Speech**: Enable/disable voice responses
+{
+  "image": "data:image/jpeg;base64,/9j/4AAQ...",
+  "include_attention": true,
+  "include_gradcam": false
+}
+```
 
-### Voice Conversation Mode
+**Response**:
+```json
+{
+  "success": true,
+  "caption": "A person walking down a city street with tall buildings",
+  "source": "ml_model",
+  "model_info": {
+    "architecture": "MobileNet + LSTM with Attention",
+    "feature_extractor": "MobileNetV2",
+    "decoder": "LSTM with Bahdanau Attention"
+  },
+  "attention_weights": [[0.1, 0.3, 0.2, ...]],
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
 
-1. Click "Start Conversation Mode" to begin an interactive session
-2. The system will automatically:
-   - Start your camera (if not already active)
-   - Capture an image
-   - Describe what it sees
-   - Activate voice input for follow-up questions
-3. Speak naturally to ask questions about what the camera sees
+#### Advanced Analysis
+```http
+POST /api/v1/vision/analyze
+Content-Type: application/json
 4. The AI will respond both visually and with speech
 
 ### Voice Commands

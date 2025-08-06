@@ -62,3 +62,6 @@ camera_config.txt
 
 # Large datasets
 annotations/
+
+# Environment variables
+.env

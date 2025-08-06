@@ -1,489 +1,634 @@
-// VisionAssist Simplified Prototype
-// A minimal implementation for demonstration purposes
-
-// Configuration
-const SERVER_URL = 'http://localhost:5000';
-
-// DOM Elements
-const cameraFeed = document.getElementById('cameraFeed');
-const captureCanvas = document.getElementById('captureCanvas');
-const startCameraBtn = document.getElementById('startCameraBtn');
-const captureBtnSingle = document.getElementById('captureBtnSingle');
-const captionContainer = document.getElementById('captionContainer');
-const conversationHistory = document.getElementById('conversationHistory');
-const userInput = document.getElementById('userInput');
-const sendBtn = document.getElementById('sendBtn');
-const speechToggle = document.getElementById('speechToggle');
-const voiceInputBtn = document.getElementById('voiceInputBtn');
-
-// Global variables
-let stream = null;
-let currentSessionId = null;
-let isSpeechEnabled = true; // Default to speech enabled
-let isListening = false; // Voice input status
-let recognition = null;
-
-// Initialize the application
-document.addEventListener('DOMContentLoaded', () => {
-    // Set up event listeners
-    startCameraBtn.addEventListener('click', startCamera);
-    captureBtnSingle.addEventListener('click', captureImage);
-    sendBtn.addEventListener('click', sendMessage);
-    userInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendMessage();
-    });
-    
-    speechToggle.addEventListener('change', () => {
-        isSpeechEnabled = speechToggle.checked;
-    });
-    
-    // Voice input button
-    if (voiceInputBtn) {
-        voiceInputBtn.addEventListener('click', startVoiceInput);
-    }
-    
-    // Initialize conversation mode
-    async function startConversationMode() {
-        // If camera is not started, start it first
-        if (!stream) {
-            addMessageToConversation('Starting camera for conversation mode...', 'system');
-            await startCamera();
-            
-            // Give the camera a moment to initialize
-            await new Promise(resolve => setTimeout(resolve, 1500));
-        }
+// VisionAssist App - Auto-Capture AI Response Logger
+class VisionAssistApp {
+    constructor() {
+        // Initialize managers
+        this.visionManager = new VisionManager();
+        this.speechManager = new SpeechManager();
+        this.conversationManager = null;
         
-        // Create a session if needed
-        if (!currentSessionId) {
-            await createSession();
-        }
+        // UI elements
+        this.elements = {};
         
-        // Show visual feedback that conversation mode is starting
-        const conversationModeBtn = document.getElementById('conversationMode');
-        if (conversationModeBtn) {
-            conversationModeBtn.disabled = true;
-            conversationModeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting conversation...';
-        }
-        
-        // Capture an image and start conversation
-        if (stream) {
-            const imageData = captureImageData();
-            if (imageData) {
-                addMessageToConversation('Starting conversation about what I can see...', 'system');
-                const response = await sendMessage("What can you see in this image?", imageData);
-                
-                // After response, start listening for follow-up
-                if (response && recognition) {
-                    addMessageToConversation('You can now ask follow-up questions about what you see', 'system');
-                    setTimeout(() => {
-                        startVoiceInput();
-                    }, 1000); // Wait for speech to finish
-                }
-            }
-        }
-        
-        // Re-enable the button
-        if (conversationModeBtn) {
-            conversationModeBtn.disabled = false;
-            conversationModeBtn.innerHTML = '<i class="fas fa-comments"></i> Start Conversation Mode';
-        }
-    }
-    
-    // Add conversation mode button
-    const conversationModeBtn = document.createElement('button');
-    conversationModeBtn.id = 'conversationMode';
-    conversationModeBtn.className = 'btn btn-primary';
-    conversationModeBtn.innerHTML = '<i class="fas fa-comments"></i> Start Conversation Mode';
-    document.querySelector('.control-panel').appendChild(conversationModeBtn);
-    
-    conversationModeBtn.addEventListener('click', startConversationMode);
-    
-    // Create a session
-    createSession();
-});
-
-// Create a conversation session
-async function createSession() {
-    try {
-        const response = await fetch(`${SERVER_URL}/api/v1/conversation/session/create`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.success && data.session_id) {
-            currentSessionId = data.session_id;
-            console.log('Created conversation session:', currentSessionId);
-            
-            // Add welcome message
-            addMessageToConversation('Welcome to VisionAssist! I can help describe what I see through your camera.', 'assistant');
-        }
-    } catch (error) {
-        console.error('Error creating session:', error);
-        
-        // Fallback
-        currentSessionId = 'demo-session-' + Date.now();
-        addMessageToConversation('Welcome to VisionAssist! I can help describe what I see through your camera.', 'assistant');
-    }
-}
-
-// Start camera
-async function startCamera() {
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                facingMode: 'environment',
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            } 
-        });
-        
-        cameraFeed.srcObject = stream;
-        await cameraFeed.play();
-        
-        // Update UI
-        startCameraBtn.textContent = 'Camera Active';
-        startCameraBtn.disabled = true;
-        captureBtnSingle.disabled = false;
-        
-        // Add message
-        addMessageToConversation('Camera activated. You can now capture images for me to describe.', 'assistant');
-        
-    } catch (error) {
-        console.error('Error accessing camera:', error);
-        addMessageToConversation('Error accessing camera. Please check your camera permissions.', 'assistant');
-    }
-}
-
-// Capture a single image
-async function captureImage() {
-    if (!stream) {
-        addMessageToConversation('Please start the camera first.', 'assistant');
-        return;
-    }
-    
-    try {
-        // Draw video frame to canvas
-        const context = captureCanvas.getContext('2d');
-        captureCanvas.width = cameraFeed.videoWidth;
-        captureCanvas.height = cameraFeed.videoHeight;
-        context.drawImage(cameraFeed, 0, 0, captureCanvas.width, captureCanvas.height);
-        
-        // Get base64 image
-        const imageData = captureCanvas.toDataURL('image/jpeg', 0.8);
-        
-        // Update UI
-        captionContainer.textContent = 'Processing image...';
-        captionContainer.classList.add('processing');
-        
-        // Send to vision service
-        const response = await fetch(`${SERVER_URL}/api/v1/vision/caption`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                image: imageData,
-                detailed: true
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.caption) {
-            // Update caption
-            updateCaptionContainer(data.caption);
-            
-            // Add to conversation
-            addMessageToConversation('I see: ' + data.caption, 'assistant');
-            
-            // If speech is enabled, speak the caption
-            if (isSpeechEnabled) {
-                speakText(data.caption);
-            }
-        } else {
-            updateCaptionContainer('Could not generate caption.');
-        }
-        
-    } catch (error) {
-        console.error('Error capturing image:', error);
-        updateCaptionContainer('Error processing image.');
-        
-        // Fallback for demo
-        const fallbackCaptions = [
-            'I see a person sitting at a desk with a computer.',
-            'There appears to be a room with furniture and windows.',
-            'I can see what looks like an indoor space with lighting.'
-        ];
-        
-        const mockCaption = fallbackCaptions[Math.floor(Math.random() * fallbackCaptions.length)];
-        updateCaptionContainer(mockCaption);
-        addMessageToConversation('I see: ' + mockCaption, 'assistant');
-        
-        if (isSpeechEnabled) {
-            speakText(mockCaption);
-        }
-    }
-}
-
-// Update caption container
-function updateCaptionContainer(text) {
-    captionContainer.textContent = text;
-    captionContainer.classList.remove('processing');
-}
-
-// Send a message to the conversation service
-async function sendMessage(message, imageData = null) {
-    // Add user message to conversation first for better UX
-    addMessageToConversation(message, 'user');
-    
-    try {
-        // Create session if needed
-        if (!currentSessionId) {
-            await createSession();
-        }
-        
-        console.log('Sending message with session ID:', currentSessionId);
-        
-        const payload = {
-            session_id: currentSessionId,
-            message: message
+        // App state
+        this.state = {
+            cameraActive: false,
+            voiceMode: false,
+            isListening: false,
+            autoCaptureEnabled: true,
+            autoCaptureInterval: 3000, // 3 seconds
+            captureCountdown: 3
         };
         
-        if (imageData) {
-            payload.image = imageData;
-        }
+        // Auto-capture timer
+        this.autoCaptureTimer = null;
+        this.countdownTimer = null;
         
-        const response = await fetch(`${SERVER_URL}/api/v1/conversation/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload)
-        });
+        // Response logger
+        this.responseLogger = {
+            entries: [],
+            maxEntries: 100
+        };
         
-        const data = await response.json();
-        
-        if (data.success) {
-            addMessageToConversation(data.response, 'assistant');
-            
-            // If speech is enabled, speak the response
-            if (isSpeechEnabled) {
-                speakText(data.response);
-            }
-            
-            return data.response;
+        this.initialize();
+    }
+
+    async initialize() {
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.initializeApp());
         } else {
-            addMessageToConversation('Sorry, I could not process your request.', 'assistant');
-            return null;
-        }
-        
-    } catch (error) {
-        console.error('Error sending message:', error);
-        
-        // Fallback responses for demo
-        const fallbackResponses = [
-            "I can see what appears to be a room with furniture.",
-            "That looks like a person using a computer.",
-            "I notice what might be a window with natural light coming in.",
-            "I'm not entirely sure what I'm seeing, but it looks like an indoor space.",
-            "I can see some objects on what appears to be a desk or table."
-        ];
-        
-        const mockResponse = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
-        addMessageToConversation(mockResponse, 'assistant');
-        
-        if (isSpeechEnabled) {
-            speakText(mockResponse);
-        }
-        
-        return null;
-    }
-}
-
-// Add message to conversation history
-function addMessageToConversation(message, sender) {
-    const messageElement = document.createElement('div');
-    messageElement.classList.add('message', sender);
-    
-    const timestamp = new Date().toLocaleTimeString();
-    
-    messageElement.innerHTML = `
-        <div class="message-content">${message}</div>
-        <div class="message-timestamp">${timestamp}</div>
-    `;
-    
-    conversationHistory.appendChild(messageElement);
-    conversationHistory.scrollTop = conversationHistory.scrollHeight;
-}
-
-// Speak text using browser's speech synthesis
-function speakText(text) {
-    if ('speechSynthesis' in window) {
-        // Cancel any ongoing speech
-        window.speechSynthesis.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        
-        // Get available voices
-        let voices = window.speechSynthesis.getVoices();
-        
-        // If voices aren't loaded yet, wait for them
-        if (voices.length === 0) {
-            window.speechSynthesis.onvoiceschanged = () => {
-                voices = window.speechSynthesis.getVoices();
-                // Try to find a natural sounding voice
-                const preferredVoice = voices.find(voice => 
-                    voice.name.includes('Samantha') || 
-                    voice.name.includes('Google') || 
-                    voice.name.includes('Natural')
-                );
-                
-                if (preferredVoice) {
-                    utterance.voice = preferredVoice;
-                }
-                
-                window.speechSynthesis.speak(utterance);
-            };
-        } else {
-            // Try to find a natural sounding voice
-            const preferredVoice = voices.find(voice => 
-                voice.name.includes('Samantha') || 
-                voice.name.includes('Google') || 
-                voice.name.includes('Natural')
-            );
-            
-            if (preferredVoice) {
-                utterance.voice = preferredVoice;
-            }
-            
-            window.speechSynthesis.speak(utterance);
+            this.initializeApp();
         }
     }
-}
 
-// Function to capture image data from the camera feed
-function captureImageData() {
-    if (!stream) {
-        console.error('Camera stream not available');
-        return null;
+    async initializeApp() {
+        console.log('🚀 Initializing VisionAssist App...');
+        
+        // Initialize UI elements
+        this.initializeElements();
+        
+        // Initialize managers
+        this.visionManager.initialize();
+        this.conversationManager = new ConversationManager(this.visionManager, this.speechManager);
+        
+        // Set up event listeners
+        this.setupEventListeners();
+        
+        // Initialize response logger
+        this.initializeResponseLogger();
+        
+        // Auto-start camera and begin capture cycle
+        await this.autoStartCamera();
+        
+        console.log('✅ VisionAssist App initialized successfully');
     }
-    
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.width = cameraFeed.videoWidth;
-    canvas.height = cameraFeed.videoHeight;
-    context.drawImage(cameraFeed, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg');
-}
 
-// Function to handle voice input
-function startVoiceInput() {
-    // Check if speech recognition is supported
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        addMessageToConversation('Speech recognition is not supported in your browser. Please try using Chrome or Edge.', 'assistant');
-        return;
+    initializeElements() {
+        // Camera elements
+        this.elements.cameraFeed = document.getElementById('cameraFeed');
+        this.elements.captionContainer = document.getElementById('captionContainer');
+        this.elements.captureIndicator = document.getElementById('captureIndicator');
+        this.elements.autoCaptureStatus = document.getElementById('autoCaptureStatus');
+        this.elements.captureCountdown = document.getElementById('captureCountdown');
+        
+        // Status elements
+        this.elements.systemStatus = document.getElementById('systemStatus');
+        this.elements.statusText = document.getElementById('statusText');
+        
+        // Logger elements
+        this.elements.responseTimeline = document.getElementById('responseTimeline');
+        this.elements.clearLogBtn = document.getElementById('clearLogBtn');
+        this.elements.exportLogBtn = document.getElementById('exportLogBtn');
+        this.elements.pauseAutoCapture = document.getElementById('pauseAutoCapture');
+        
+        // Voice elements
+        this.elements.voiceIndicator = document.getElementById('voiceIndicator');
+        this.elements.realTimeTranscript = document.getElementById('realTimeTranscript');
+        this.elements.conversationModeBtn = document.getElementById('conversationModeBtn');
     }
-    
-    // Initialize recognition if not already done
-    if (!recognition) {
+
+    setupEventListeners() {
+        // Auto-capture controls
+        this.elements.pauseAutoCapture?.addEventListener('click', () => this.toggleAutoCapture());
+        this.elements.conversationModeBtn?.addEventListener('click', () => this.handleVoiceMode());
+        
+        // Logger controls
+        this.elements.clearLogBtn?.addEventListener('click', () => this.clearResponseLog());
+        this.elements.exportLogBtn?.addEventListener('click', () => this.exportResponseLog());
+        
+        // Listen for AI responses from other components
+        document.addEventListener('aiResponse', (event) => this.logAIResponse(event.detail));
+        document.addEventListener('visionCaption', (event) => this.logVisionResponse(event.detail));
+        document.addEventListener('conversationResponse', (event) => this.logConversationResponse(event.detail));
+        
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', () => this.handleVisibilityChange());
+    }
+
+    initializeResponseLogger() {
+        // Show initial placeholder
+        this.updateTimelinePlaceholder();
+    }
+
+    async autoStartCamera() {
         try {
-            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-            recognition.continuous = false;
-            recognition.interimResults = true;
-            recognition.lang = 'en-US';
+            this.updateSystemStatus('starting', 'Starting camera...');
+            
+            const success = await this.visionManager.startCamera();
+            
+            if (success) {
+                this.state.cameraActive = true;
+                this.updateSystemStatus('active', 'Camera active');
+                this.updateCaptionDisplay('Camera started - beginning auto-capture in 3 seconds...');
+                
+                // Log camera start
+                this.logSystemEvent('Camera started automatically');
+                
+                // Start auto-capture cycle
+                this.startAutoCaptureLoop();
+            } else {
+                this.updateSystemStatus('error', 'Camera failed');
+                this.updateCaptionDisplay('Failed to start camera. Please check permissions and refresh the page.');
+                this.logSystemEvent('Camera failed to start automatically', 'error');
+            }
         } catch (error) {
-            console.error('Error initializing speech recognition:', error);
-            addMessageToConversation('Could not initialize speech recognition. Please check your browser permissions.', 'assistant');
+            console.error('Error auto-starting camera:', error);
+            this.updateSystemStatus('error', 'Camera error');
+            this.updateCaptionDisplay('Error starting camera automatically');
+            this.logSystemEvent(`Camera auto-start error: ${error.message}`, 'error');
+        }
+    }
+
+    startAutoCaptureLoop() {
+        if (!this.state.autoCaptureEnabled || !this.state.cameraActive) return;
+        
+        // Start countdown
+        this.startCountdown();
+        
+        // Set up the capture timer
+        this.autoCaptureTimer = setInterval(() => {
+            if (this.state.autoCaptureEnabled && this.state.cameraActive) {
+                this.performAutoCapture();
+                this.startCountdown(); // Restart countdown for next capture
+            }
+        }, this.state.autoCaptureInterval);
+        
+        this.logSystemEvent('Auto-capture started (3-second intervals)');
+    }
+
+    startCountdown() {
+        // Clear any existing countdown
+        if (this.countdownTimer) {
+            clearInterval(this.countdownTimer);
+        }
+        
+        this.state.captureCountdown = 3;
+        this.updateCountdownDisplay();
+        
+        this.countdownTimer = setInterval(() => {
+            this.state.captureCountdown--;
+            this.updateCountdownDisplay();
+            
+            if (this.state.captureCountdown <= 0) {
+                clearInterval(this.countdownTimer);
+                this.showCaptureIndicator();
+            }
+        }, 1000);
+    }
+
+    async performAutoCapture() {
+        if (!this.state.cameraActive) return;
+        
+        try {
+            this.updateCaptionDisplay('Analyzing image...', 'processing');
+            
+            // Capture image first
+            const imageData = await this.visionManager.captureImageFromVideo();
+            
+            if (!imageData) {
+                this.updateCaptionDisplay('Failed to capture image');
+                this.logSystemEvent('Auto-capture: Failed to capture image', 'error');
+                return;
+            }
+            
+            // Get detailed analysis
+            const analysisResult = await this.visionManager.getDetailedAnalysis(imageData);
+            
+            if (analysisResult && analysisResult.success) {
+                // Extract caption from nested analysis object
+                const analysisData = analysisResult.analysis || analysisResult;
+                const caption = analysisData.caption || analysisData.description || analysisResult.caption || analysisResult.description || 'Unable to describe the image';
+                
+                this.updateCaptionDisplay(caption);
+                this.logVisionResponse({
+                    caption: caption,
+                    confidence: analysisData.confidence || 'N/A',
+                    processing_time: analysisData.processing_time || 'N/A',
+                    auto_captured: true
+                });
+            } else {
+                this.updateCaptionDisplay('Failed to analyze image');
+                this.logSystemEvent('Auto-capture analysis failed', 'error');
+            }
+        } catch (error) {
+            console.error('Error in auto-capture:', error);
+            this.updateCaptionDisplay('Error analyzing image');
+            this.logSystemEvent(`Auto-capture error: ${error.message}`, 'error');
+        }
+    }
+
+    toggleAutoCapture() {
+        if (this.state.autoCaptureEnabled) {
+            // Pause auto-capture
+            this.state.autoCaptureEnabled = false;
+            this.stopAutoCaptureLoop();
+            this.elements.pauseAutoCapture.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5,3 19,12 5,21"/>
+                </svg>
+            `;
+            this.elements.pauseAutoCapture.title = 'Resume Auto-Capture';
+            this.updateSystemStatus('paused', 'Auto-capture paused');
+            this.logSystemEvent('Auto-capture paused');
+        } else {
+            // Resume auto-capture
+            this.state.autoCaptureEnabled = true;
+            this.startAutoCaptureLoop();
+            this.elements.pauseAutoCapture.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="6" y="4" width="4" height="16"/>
+                    <rect x="14" y="4" width="4" height="16"/>
+                </svg>
+            `;
+            this.elements.pauseAutoCapture.title = 'Pause Auto-Capture';
+            this.updateSystemStatus('active', 'Auto-capture resumed');
+            this.logSystemEvent('Auto-capture resumed');
+        }
+    }
+
+    stopAutoCaptureLoop() {
+        if (this.autoCaptureTimer) {
+            clearInterval(this.autoCaptureTimer);
+            this.autoCaptureTimer = null;
+        }
+        if (this.countdownTimer) {
+            clearInterval(this.countdownTimer);
+            this.countdownTimer = null;
+        }
+        this.hideCountdownDisplay();
+    }
+
+    async handleVoiceMode() {
+        if (!this.state.cameraActive) {
+            this.logSystemEvent('Camera must be active for voice mode', 'warning');
             return;
         }
-    }
-    
-    if (isListening) {
-        recognition.stop();
-        return;
-    }
-    
-    // Visual feedback that we're listening
-    isListening = true;
-    voiceInputBtn.classList.add('listening');
-    voiceInputBtn.innerHTML = '<i class="fas fa-microphone-slash"></i> Stop Listening';
-    
-    let finalTranscript = '';
-    
-    recognition.start();
-    
-    recognition.onresult = (event) => {
-        let interimTranscript = '';
         
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript;
+        try {
+            if (!this.state.voiceMode) {
+                // Start voice mode
+                this.state.voiceMode = true;
+                this.elements.conversationModeBtn.classList.add('active');
+                
+                // Start conversation mode
+                await this.conversationManager.startConversationMode();
+                this.showVoiceIndicator();
+                this.logSystemEvent('Voice mode activated');
             } else {
-                interimTranscript += event.results[i][0].transcript;
+                // Stop voice mode
+                this.state.voiceMode = false;
+                this.elements.conversationModeBtn.classList.remove('active');
+                
+                // Stop conversation mode
+                this.conversationManager.stopConversationMode();
+                this.hideVoiceIndicator();
+                this.logSystemEvent('Voice mode deactivated');
+            }
+        } catch (error) {
+            console.error('Error toggling voice mode:', error);
+            this.logSystemEvent(`Voice mode error: ${error.message}`, 'error');
+        }
+    }
+
+    handleVisibilityChange() {
+        if (document.hidden) {
+            // Page is hidden, pause auto-capture to save resources
+            if (this.state.autoCaptureEnabled) {
+                this.stopAutoCaptureLoop();
+                this.logSystemEvent('Auto-capture paused (page hidden)');
+            }
+        } else {
+            // Page is visible again, resume auto-capture
+            if (this.state.autoCaptureEnabled && this.state.cameraActive) {
+                this.startAutoCaptureLoop();
+                this.logSystemEvent('Auto-capture resumed (page visible)');
             }
         }
+    }
+
+    // Response Logger Methods
+    logAIResponse(data) {
+        this.addLogEntry({
+            type: 'ai_response',
+            content: data.response || data.content,
+            metadata: data,
+            timestamp: new Date()
+        });
+    }
+
+    logVisionResponse(data) {
+        this.addLogEntry({
+            type: 'vision_analysis',
+            content: data.caption,
+            metadata: {
+                confidence: data.confidence,
+                processing_time: data.processing_time,
+                model_info: data.model_info,
+                auto_captured: data.auto_captured || false
+            },
+            timestamp: new Date()
+        });
+    }
+
+    logConversationResponse(data) {
+        this.addLogEntry({
+            type: 'conversation',
+            content: data.response,
+            metadata: {
+                context_used: data.context_used,
+                session_id: data.session_id
+            },
+            timestamp: new Date()
+        });
+    }
+
+    logSystemEvent(message, level = 'info') {
+        this.addLogEntry({
+            type: 'system',
+            content: message,
+            level: level,
+            timestamp: new Date()
+        });
+    }
+
+    addLogEntry(entry) {
+        // Add to entries array
+        this.responseLogger.entries.unshift(entry);
         
-        // Show interim results
-        if (interimTranscript !== '') {
-            userInput.value = interimTranscript;
+        // Limit number of entries
+        if (this.responseLogger.entries.length > this.responseLogger.maxEntries) {
+            this.responseLogger.entries = this.responseLogger.entries.slice(0, this.responseLogger.maxEntries);
         }
         
-        // Process final results
-        if (finalTranscript !== '') {
-            userInput.value = finalTranscript;
-        }
-    };
-    
-    recognition.onend = () => {
-        isListening = false;
-        voiceInputBtn.classList.remove('listening');
-        voiceInputBtn.innerHTML = '<i class="fas fa-microphone"></i> Voice Input';
+        // Update UI
+        this.renderResponseTimeline();
         
-        // If we have a transcript, send it
-        if (userInput.value.trim() !== '') {
-            sendBtn.click();
-        }
-    };
-    
-    recognition.onerror = (event) => {
-        isListening = false;
-        voiceInputBtn.classList.remove('listening');
-        voiceInputBtn.innerHTML = '<i class="fas fa-microphone"></i> Voice Input';
-        console.error('Speech recognition error', event.error);
+        // Dispatch custom event for other components
+        document.dispatchEvent(new CustomEvent('logEntryAdded', { detail: entry }));
+    }
+
+    renderResponseTimeline() {
+        const timeline = this.elements.responseTimeline;
+        if (!timeline) return;
         
-        // Handle specific error types
-        let errorMessage = '';
-        switch(event.error) {
-            case 'network':
-                errorMessage = 'Network error occurred. Please check your internet connection and try again.';
-                break;
-            case 'not-allowed':
-            case 'permission-denied':
-                errorMessage = 'Microphone access was denied. Please allow microphone access in your browser settings.';
-                break;
-            case 'aborted':
-                errorMessage = 'Speech recognition was aborted.';
-                break;
-            case 'audio-capture':
-                errorMessage = 'No microphone was found. Please ensure your microphone is connected.';
-                break;
-            case 'service-not-allowed':
-                errorMessage = 'Speech recognition service is not allowed. This may be due to browser restrictions.';
-                break;
-            default:
-                errorMessage = `Speech recognition error: ${event.error}`;
+        // Clear existing content
+        timeline.innerHTML = '';
+        
+        if (this.responseLogger.entries.length === 0) {
+            this.updateTimelinePlaceholder();
+            return;
         }
         
-        addMessageToConversation(errorMessage, 'assistant');
+        // Render entries
+        this.responseLogger.entries.forEach(entry => {
+            const entryElement = this.createLogEntryElement(entry);
+            timeline.appendChild(entryElement);
+        });
         
-        // Fallback to text input
-        userInput.focus();
-    };
+        // Scroll to top for newest entry
+        timeline.scrollTop = 0;
+    }
+
+    createLogEntryElement(entry) {
+        const entryDiv = document.createElement('div');
+        entryDiv.className = 'response-entry';
+        entryDiv.setAttribute('data-type', entry.type);
+        
+        // Add auto-capture indicator if applicable
+        if (entry.metadata?.auto_captured) {
+            entryDiv.classList.add('auto-captured');
+        }
+        
+        // Create header
+        const header = document.createElement('div');
+        header.className = 'response-header';
+        
+        const typeSpan = document.createElement('div');
+        typeSpan.className = 'response-type';
+        typeSpan.innerHTML = `
+            ${this.getTypeIcon(entry.type)}
+            <span>${this.getTypeLabel(entry.type)}</span>
+            ${entry.metadata?.auto_captured ? '<span class="auto-badge">AUTO</span>' : ''}
+        `;
+        
+        const timestamp = document.createElement('div');
+        timestamp.className = 'response-timestamp';
+        timestamp.textContent = this.formatTimestamp(entry.timestamp);
+        
+        header.appendChild(typeSpan);
+        header.appendChild(timestamp);
+        
+        // Create content
+        const content = document.createElement('div');
+        content.className = 'response-content';
+        content.textContent = entry.content;
+        
+        entryDiv.appendChild(header);
+        entryDiv.appendChild(content);
+        
+        return entryDiv;
+    }
+
+    getTypeIcon(type) {
+        const icons = {
+            'vision_analysis': '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+            'conversation': '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+            'ai_response': '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.12 0 4.07.74 5.61 1.98"/></svg>',
+            'system': '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'
+        };
+        return icons[type] || icons['system'];
+    }
+
+    getTypeLabel(type) {
+        const labels = {
+            'vision_analysis': 'Vision Analysis',
+            'conversation': 'Conversation',
+            'ai_response': 'AI Response',
+            'system': 'System'
+        };
+        return labels[type] || 'Unknown';
+    }
+
+    formatTimestamp(timestamp) {
+        return timestamp.toLocaleTimeString('en-US', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    }
+
+    updateTimelinePlaceholder() {
+        const timeline = this.elements.responseTimeline;
+        if (!timeline) return;
+        
+        timeline.innerHTML = `
+            <div class="timeline-placeholder">
+                <div class="placeholder-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12,6 12,12 16,14"/>
+                    </svg>
+                </div>
+                <p>Auto-capture will begin shortly. AI responses will appear here every 3 seconds.</p>
+            </div>
+        `;
+    }
+
+    clearResponseLog() {
+        this.responseLogger.entries = [];
+        this.updateTimelinePlaceholder();
+        this.logSystemEvent('Response log cleared');
+    }
+
+    exportResponseLog() {
+        try {
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                entries: this.responseLogger.entries,
+                metadata: {
+                    total_entries: this.responseLogger.entries.length,
+                    auto_capture_enabled: this.state.autoCaptureEnabled,
+                    capture_interval: this.state.autoCaptureInterval,
+                    export_version: '1.0'
+                }
+            };
+            
+            const dataStr = JSON.stringify(exportData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(dataBlob);
+            link.download = `visionassist-auto-log-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            
+            this.logSystemEvent('Response log exported successfully');
+        } catch (error) {
+            console.error('Error exporting log:', error);
+            this.logSystemEvent(`Export failed: ${error.message}`, 'error');
+        }
+    }
+
+    // UI Helper Methods
+    updateSystemStatus(status, text) {
+        const statusDot = this.elements.systemStatus;
+        const statusText = this.elements.statusText;
+        
+        if (statusDot) {
+            statusDot.className = 'status-dot';
+            statusDot.classList.add(status);
+        }
+        
+        if (statusText) {
+            statusText.textContent = text;
+        }
+    }
+
+    updateCaptionDisplay(text, state = 'normal') {
+        const container = this.elements.captionContainer;
+        if (!container) return;
+        
+        // Remove all state classes
+        container.classList.remove('processing');
+        
+        if (state === 'processing') {
+            container.classList.add('processing');
+            container.innerHTML = `
+                <div class="caption-content processing">
+                    <div class="processing-spinner"></div>
+                    <p>${text}</p>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="caption-content">
+                    <p>${text}</p>
+                </div>
+            `;
+        }
+    }
+
+    updateCountdownDisplay() {
+        const countdown = this.elements.captureCountdown;
+        const status = this.elements.autoCaptureStatus;
+        
+        if (countdown) {
+            countdown.textContent = this.state.captureCountdown;
+        }
+        
+        if (status) {
+            status.style.opacity = this.state.captureCountdown > 0 ? '1' : '0.5';
+        }
+    }
+
+    hideCountdownDisplay() {
+        const status = this.elements.autoCaptureStatus;
+        if (status) {
+            status.style.opacity = '0.3';
+        }
+    }
+
+    showCaptureIndicator() {
+        const indicator = this.elements.captureIndicator;
+        if (indicator) {
+            indicator.classList.add('capturing');
+            setTimeout(() => {
+                indicator.classList.remove('capturing');
+            }, 500);
+        }
+    }
+
+    showVoiceIndicator() {
+        this.elements.voiceIndicator?.classList.add('active');
+    }
+
+    hideVoiceIndicator() {
+        this.elements.voiceIndicator?.classList.remove('active');
+    }
+
+    // Voice activity updates
+    updateVoiceActivity(isListening) {
+        this.state.isListening = isListening;
+        const indicator = this.elements.voiceIndicator;
+        if (!indicator) return;
+        
+        if (isListening) {
+            indicator.classList.add('listening');
+            indicator.querySelector('.voice-status').textContent = 'Listening...';
+        } else {
+            indicator.classList.remove('listening');
+            indicator.querySelector('.voice-status').textContent = 'Voice Mode Active';
+        }
+    }
+
+    updateTranscript(text, isFinal = false) {
+        const transcript = this.elements.realTimeTranscript;
+        if (!transcript) return;
+        
+        if (text) {
+            transcript.textContent = text;
+            transcript.classList.add('active');
+        } else {
+            transcript.classList.remove('active');
+        }
+    }
+
+    // Cleanup method
+    destroy() {
+        this.stopAutoCaptureLoop();
+        if (this.conversationManager) {
+            this.conversationManager.stopConversationMode();
+        }
+    }
 }
+
+// Initialize the app when the script loads
+const visionAssistApp = new VisionAssistApp();
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    visionAssistApp.destroy();
+});
+
+// Export for debugging
+window.visionAssistApp = visionAssistApp;
