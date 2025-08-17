@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional
 import traceback
+from config import config, validate_config
 
 # Import our ML backend
 try:
@@ -24,10 +25,29 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, origins=["*"], methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
+# Enforce max payload size and set up CORS using configured origins
+app.config['MAX_CONTENT_LENGTH'] = config.MAX_CONTENT_LENGTH
+CORS(
+    app,
+    origins=config.cors_origins_list,
+    methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+    supports_credentials=False
+)
 
 # Store conversation history (in production, use Redis or database)
 conversation_history = {}
+
+# Validate configuration on startup
+print("\n🧩 Validating configuration...")
+cfg_status = validate_config()
+if not cfg_status['valid']:
+    logger.warning("Configuration issues detected:")
+    for issue in cfg_status['issues']:
+        logger.warning(f" - {issue}")
+    if os.getenv('ENVIRONMENT') == 'production':
+        logger.error("Invalid configuration in production. Exiting.")
+        raise SystemExit(1)
 
 # Initialize ML backend on startup
 print("\n🚀 Initializing VisionAssist ML Backend...")
@@ -215,6 +235,16 @@ def health_check():
         'timestamp': datetime.now().isoformat(),
         'version': '2.0.0-ml'
     }), 200
+
+@app.after_request
+def apply_security_headers(response):
+    """Apply basic security headers"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    # Allow CORS set by Flask-CORS, do not override here
+    return response
 
 @app.route('/api/v1/vision/caption', methods=['POST'])
 def caption():
@@ -426,8 +456,8 @@ def model_info():
 
 if __name__ == '__main__':
     print("\n🌟 VisionAssist ML Server Starting...")
-    print(f"📡 Server will be available at: http://localhost:5000")
+    print(f"📡 Server will be available at: http://{config.HOST}:{config.PORT}")
     print(f"🔬 ML Backend Status: {'✅ Loaded' if ML_BACKEND_LOADED else '❌ Fallback Mode'}")
     print("🎯 Ready to assist visually impaired users with AI-powered descriptions\n")
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG)

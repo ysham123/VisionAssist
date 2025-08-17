@@ -116,7 +116,26 @@
         </button>
     </div>
 
+    <!-- Text Input Fallback for Conversation Mode -->
+    <div id="textInputFallback" class="text-input-fallback" style="display:none" aria-live="polite">
+        <div class="text-fallback-header">
+            <h3>Text Conversation</h3>
+        </div>
+        <div id="conversationHistoryText" class="conversation-history-text" role="log" aria-label="Conversation history"></div>
+        <div class="text-fallback-input-row">
+            <input id="conversationTextInput" type="text" placeholder="Type your message..." aria-label="Type your message" />
+            <button id="sendTextBtn" class="control-btn">Send</button>
+        </div>
+    </div>
+
     <!-- JavaScript Modules -->
+    <script>
+        // Runtime configuration injected at load time
+        window.APP_CONFIG = Object.assign({
+            // Empty string defaults to same-origin API Gateway
+            apiBaseUrl: ''
+        }, window.APP_CONFIG || {});
+    </script>
     <script src="static/vision.js"></script>
     <script src="static/speech.js"></script>
     <script src="static/conversation.js"></script>

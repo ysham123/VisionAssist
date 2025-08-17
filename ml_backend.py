@@ -9,13 +9,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.models as models
-from transformers import GPT2TokenizerFast, BlipProcessor, BlipForConditionalGeneration
-import numpy as np
-import cv2
+from torchvision.models import MobileNet_V2_Weights
+from transformers import BlipProcessor, BlipForConditionalGeneration
 from PIL import Image
+import numpy as np
 import base64
 import io
-import json
 from typing import Dict, List, Tuple, Optional
 import logging
 from datetime import datetime
@@ -32,8 +31,12 @@ class MobileNetFeatureExtractor(nn.Module):
     
     def __init__(self, feature_dim: int = 1280):
         super().__init__()
-        # Load pre-trained MobileNetV2
-        self.mobilenet = models.mobilenet_v2(pretrained=True)
+        # Load pre-trained MobileNetV2 (new weights API)
+        try:
+            self.mobilenet = models.mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1)
+        except TypeError:
+            # Fallback for older torchvision versions
+            self.mobilenet = models.mobilenet_v2(pretrained=True)
         # Remove classifier to get features
         self.features = self.mobilenet.features
         self.avgpool = nn.AdaptiveAvgPool2d((7, 7))  # Spatial features for attention
@@ -309,7 +312,8 @@ class GradCAMVisualizer:
         
         # Register hooks
         self.model.feature_extractor.features[-1].register_forward_hook(self._save_activation)
-        self.model.feature_extractor.features[-1].register_backward_hook(self._save_gradient)
+        # Use full backward hook to avoid deprecation issues
+        self.model.feature_extractor.features[-1].register_full_backward_hook(self._save_gradient)
     
     def _save_activation(self, module, input, output):
         self.activations = output
@@ -597,4 +601,4 @@ if __name__ == "__main__":
     backend = MLBackend()
     print("ML Backend initialized successfully!")
     print(f"Model device: {backend.device}")
-    print(f"Vocabulary size: {len(backend.tokenizer)}")
+    print(f"BLIP model loaded: {backend.model_loaded}")

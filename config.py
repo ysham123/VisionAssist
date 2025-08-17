@@ -21,7 +21,7 @@ class Config:
     
     # API settings
     API_VERSION: str = os.getenv('API_VERSION', 'v1')
-    CORS_ORIGINS: str = os.getenv('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5000')
+    CORS_ORIGINS: str = os.getenv('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5000,http://127.0.0.1:49173')
     
     # Security
     SECRET_KEY: str = os.getenv('SECRET_KEY', 'dev-key-change-in-production')

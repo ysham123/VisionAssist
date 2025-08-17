@@ -191,19 +191,15 @@ class VisionAssistApp {
                 return;
             }
             
-            // Get detailed analysis
-            const analysisResult = await this.visionManager.getDetailedAnalysis(imageData);
+            // Get caption using simpler endpoint
+            const caption = await this.visionManager.fetchCaption(imageData, true);
             
-            if (analysisResult && analysisResult.success) {
-                // Extract caption from nested analysis object
-                const analysisData = analysisResult.analysis || analysisResult;
-                const caption = analysisData.caption || analysisData.description || analysisResult.caption || analysisResult.description || 'Unable to describe the image';
-                
+            if (caption) {
                 this.updateCaptionDisplay(caption);
                 this.logVisionResponse({
                     caption: caption,
-                    confidence: analysisData.confidence || 'N/A',
-                    processing_time: analysisData.processing_time || 'N/A',
+                    confidence: 'Auto-captured',
+                    processing_time: 'Real-time',
                     auto_captured: true
                 });
             } else {

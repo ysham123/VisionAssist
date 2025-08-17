@@ -9,7 +9,8 @@ class VisionManager {
 
     initialize() {
         this.cameraFeed = document.getElementById('cameraFeed');
-        this.captureCanvas = document.getElementById('captureCanvas');
+        // Use existing canvas if present; otherwise leave null and create on demand
+        this.captureCanvas = document.getElementById('captureCanvas') || null;
     }
 
     // Start camera
@@ -130,14 +131,17 @@ class VisionManager {
         }
         
         try {
-            // Draw video frame to canvas
-            const context = this.captureCanvas.getContext('2d');
-            this.captureCanvas.width = this.cameraFeed.videoWidth;
-            this.captureCanvas.height = this.cameraFeed.videoHeight;
-            context.drawImage(this.cameraFeed, 0, 0, this.captureCanvas.width, this.captureCanvas.height);
+            // Ensure we have a canvas to draw to
+            const canvas = this.captureCanvas || document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Failed to get 2D context');
+
+            canvas.width = this.cameraFeed.videoWidth;
+            canvas.height = this.cameraFeed.videoHeight;
+            context.drawImage(this.cameraFeed, 0, 0, canvas.width, canvas.height);
             
             // Get base64 image
-            const imageData = this.captureCanvas.toDataURL('image/jpeg', 0.8);
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
             console.log('📸 Image captured successfully');
             
             return imageData;

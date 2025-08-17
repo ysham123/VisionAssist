@@ -3,10 +3,12 @@ class ConversationManager {
     constructor(visionManager, speechManager) {
         this.visionManager = visionManager;
         this.speechManager = speechManager;
-        this.serverUrl = 'http://localhost:5000';
+        // Prefer runtime-configured API base URL; fallback to relative path
+        this.serverUrl = (window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) ? window.APP_CONFIG.apiBaseUrl : '';
         this.sessionId = null;
         this.conversationHistory = [];
         this.conversationContainer = null;
+        this._hasWelcomed = false;
         
         this.initialize();
     }
@@ -19,7 +21,7 @@ class ConversationManager {
     // Create a new conversation session
     async createSession() {
         try {
-            const response = await fetch(`${this.serverUrl}/api/v1/conversation/sessions`, {
+            const response = await fetch(`${this.serverUrl}/api/v1/conversation/session`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -41,20 +43,41 @@ class ConversationManager {
         }
     }
 
-    // Add message to conversation display
+    // Ensure session is created before sending any messages
+    async ensureSessionCreated() {
+        if (!this.sessionId) {
+            try {
+                await this.createSession();
+            } catch (e) {
+                console.warn('⚠️ Failed to pre-create session, proceeding with fallback ID.');
+                if (!this.sessionId) {
+                    this.sessionId = `session_${Date.now()}`;
+                }
+            }
+        }
+    }
+
+    // Add message to conversation display (safe against XSS)
     addMessage(message, sender) {
         if (!this.conversationContainer) return;
 
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}`;
-        
-        const timestamp = new Date().toLocaleTimeString();
-        messageDiv.innerHTML = `
-            <div class="message-content">
-                <div class="message-text">${message}</div>
-                <div class="message-time">${timestamp}</div>
-            </div>
-        `;
+
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'message-content';
+
+        const textEl = document.createElement('div');
+        textEl.className = 'message-text';
+        textEl.textContent = String(message);
+
+        const timeEl = document.createElement('div');
+        timeEl.className = 'message-time';
+        timeEl.textContent = new Date().toLocaleTimeString();
+
+        contentWrapper.appendChild(textEl);
+        contentWrapper.appendChild(timeEl);
+        messageDiv.appendChild(contentWrapper);
         
         this.conversationContainer.appendChild(messageDiv);
         this.conversationContainer.scrollTop = this.conversationContainer.scrollHeight;
@@ -88,6 +111,9 @@ class ConversationManager {
                 console.warn('💬 Message is very long:', message.length, 'characters');
                 message = message.substring(0, 1000) + '...';
             }
+
+            // Ensure a session exists before proceeding
+            await this.ensureSessionCreated();
 
             // Add user message to conversation
             this.addMessage(message, 'user');
@@ -293,14 +319,17 @@ class ConversationManager {
                         }
                     }, 3000);
                     
-                    // Welcome message for voice mode
-                    const welcomeMessage = "I'm ready to chat! I can see through your camera and answer questions about what I observe. Speak or I'll switch to text input shortly.";
-                    this.addMessage(welcomeMessage, 'assistant');
-                    this.speechManager.speakTextAndThenListen(welcomeMessage, () => {
-                        if (this.speechManager.isConversationModeActive()) {
-                            this.speechManager.startListening();
-                        }
-                    });
+                    // Welcome message for voice mode (avoid duplicates across mode switches)
+                    if (!this._hasWelcomed) {
+                        const welcomeMessage = "I'm ready to chat! I can see through your camera and answer questions about what I observe. Speak or I'll switch to text input shortly.";
+                        this.addMessage(welcomeMessage, 'assistant');
+                        this.speechManager.speakTextAndThenListen(welcomeMessage, () => {
+                            if (this.speechManager.isConversationModeActive()) {
+                                this.speechManager.startListening();
+                            }
+                        });
+                        this._hasWelcomed = true;
+                    }
                     return; // Successfully started voice mode
                 }
             }
@@ -329,9 +358,12 @@ class ConversationManager {
                 conversationTextInput.focus();
             }
             
-            // Add welcome message to text conversation
-            const welcomeMessage = "I'm ready to chat! I can see through your camera and answer questions about what I observe. Type your question below:";
-            this.addTextMessage(welcomeMessage, 'assistant');
+            // Add welcome message to text conversation (avoid duplicates)
+            if (!this._hasWelcomed) {
+                const welcomeMessage = "I'm ready to chat! I can see through your camera and answer questions about what I observe. Type your question below:";
+                this.addTextMessage(welcomeMessage, 'assistant');
+                this._hasWelcomed = true;
+            }
             
             // Set up text input event listeners
             this.setupTextInputListeners();
@@ -450,15 +482,13 @@ class ConversationManager {
         
         // Clear conversation history
         this.clearConversation();
+        this._hasWelcomed = false;
         
         // Clear text conversation history
         const conversationHistoryText = document.getElementById('conversationHistoryText');
         if (conversationHistoryText) {
             conversationHistoryText.innerHTML = '';
         }
-        
-        // Update UI state
-        this.updateConversationModeUI(false);
     }
 
     // Handle conversation errors
@@ -598,10 +628,14 @@ class ConversationManager {
             'HTTP 504'
         ];
         
-        return retryableErrors.some(retryableError => 
-            error.message.includes(retryableError) || 
-            error.name === retryableError
+        const msg = (error && error.message ? String(error.message) : '').toLowerCase();
+        const name = (error && error.name ? String(error.name) : '');
+        const listMatch = retryableErrors.some(retryableError => 
+            msg.includes(retryableError.toLowerCase()) || name === retryableError
         );
+        // Treat any generic timeout wording as retryable
+        const timeoutMatch = msg.includes('timeout');
+        return listMatch || timeoutMatch;
     }
     
     // Get appropriate fallback response based on error
@@ -648,10 +682,24 @@ class ConversationManager {
     // Health check for backend connectivity
     async checkBackendHealth() {
         try {
+            // Use AbortSignal.timeout when available, otherwise fallback to AbortController
+            let signal;
+            let controller;
+            let timeoutId;
+            if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+                signal = AbortSignal.timeout(5000);
+            } else if (typeof AbortController !== 'undefined') {
+                controller = new AbortController();
+                timeoutId = setTimeout(() => controller.abort(), 5000);
+                signal = controller.signal;
+            }
+            
             const response = await fetch(`${this.serverUrl}/api/v1/model/info`, {
                 method: 'GET',
-                signal: AbortSignal.timeout(5000)
+                ...(signal ? { signal } : {})
             });
+            
+            if (timeoutId) clearTimeout(timeoutId);
             
             return response.ok;
         } catch (error) {

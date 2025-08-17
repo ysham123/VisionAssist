@@ -186,7 +186,7 @@ class SpeechManager {
             
             // Reinitialize recognition
             setTimeout(() => {
-                this.initializeRecognition();
+                this.initializeSpeechRecognition();
                 console.log('🎤 Speech recognition reset complete');
             }, 100);
         }

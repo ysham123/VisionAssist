@@ -287,7 +287,9 @@ class RobustnessTestSuite {
             {
                 name: 'Large conversation history',
                 test: async () => {
-                    const originalHistory = this.conversationManager.conversationHistory;
+                    // Preserve original history by value, not by reference
+                    const originalHistoryCopy = this.conversationManager.conversationHistory.slice();
+                    const initialLen = originalHistoryCopy.length;
                     
                     // Add 1000 messages to history
                     for (let i = 0; i < 1000; i++) {
@@ -299,10 +301,10 @@ class RobustnessTestSuite {
                     }
                     
                     const status = this.conversationManager.getSystemStatus();
-                    const passed = status.conversationHistory === 1000;
+                    const passed = status.conversationHistory === initialLen + 1000;
                     
                     // Restore original history
-                    this.conversationManager.conversationHistory = originalHistory;
+                    this.conversationManager.conversationHistory = originalHistoryCopy;
                     
                     return passed;
                 }
