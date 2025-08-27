@@ -4,7 +4,8 @@ class VisionManager {
         this.stream = null;
         this.cameraFeed = null;
         this.captureCanvas = null;
-        this.serverUrl = 'http://localhost:5000';
+        // Use runtime-configured API base URL if provided; fallback to same-origin
+        this.serverUrl = (window.APP_CONFIG && window.APP_CONFIG.apiBaseUrl) ? window.APP_CONFIG.apiBaseUrl : '';
     }
 
     initialize() {

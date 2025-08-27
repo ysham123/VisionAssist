@@ -21,7 +21,7 @@ class ConversationManager {
     // Create a new conversation session
     async createSession() {
         try {
-            const response = await fetch(`${this.serverUrl}/api/v1/conversation/session`, {
+            const response = await fetch(`${this.serverUrl}/api/v1/conversation/sessions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
