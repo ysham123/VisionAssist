@@ -37,7 +37,7 @@ if lsof -i ":$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 
 # Start server in background, then open browser once health responds
-"$VENV_DIR/bin/python" server.py &
+"$VENV_DIR/bin/python" app.py &
 APP_PID=$!
 
 cleanup() {
@@ -46,10 +46,10 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Wait for health endpoint
+# Wait for health endpoint (supports legacy /api/v1/health or /health)
 echo "[wait] Waiting for server to become ready on http://$HOST:$PORT ..."
 for i in {1..30}; do
-  if curl -fsS "http://$HOST:$PORT/api/v1/health" >/dev/null 2>&1; then
+  if curl -fsS "http://$HOST:$PORT/health" >/dev/null 2>&1 || curl -fsS "http://$HOST:$PORT/api/v1/health" >/dev/null 2>&1; then
     echo "[ok] Server is ready"
     if command -v open >/dev/null 2>&1; then
       open "http://$HOST:$PORT/" || true
