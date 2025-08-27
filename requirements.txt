@@ -1,53 +1,62 @@
-# VisionAssist Requirements - Updated Architecture
-# Core ML and Deep Learning
+# VisionAssist Requirements - Production Ready
+
+# Core Dependencies
+python-dotenv>=1.0.0  # Environment variables
+pydantic>=2.0.0  # Data validation
+python-multipart>=0.0.6  # File uploads
+
+# Web Framework
+flask>=2.3.0
+flask-cors>=4.0.0
+flask-limiter>=3.5.0  # Rate limiting
+flask-talisman>=1.1.0  # Security headers
+gunicorn>=21.2.0  # Production WSGI server
+
+# ML and Computer Vision
 torch>=2.0.0
 torchvision>=0.15.0
 transformers>=4.30.0
 numpy>=1.24.0
 scipy>=1.10.0
-
-# Computer Vision and Image Processing
 Pillow>=10.0.0
 opencv-python>=4.8.0
 scikit-image>=0.21.0
 
-# Web Framework and API
-flask>=2.3.0
-flask-cors>=4.0.0
-flask-limiter>=3.5.0  # Rate limiting
-requests>=2.31.0
-gunicorn>=21.2.0  # Production WSGI server
-
-# Async Support
+# Async and Performance
 asyncio-pool>=0.6.0
 aiohttp>=3.8.0
+uvloop>=0.17.0  # Faster asyncio event loop
 
 # Database and Caching
 redis>=4.6.0
 sqlalchemy>=2.0.0
 alembic>=1.12.0  # Database migrations
+psycopg2-binary>=2.9.9  # PostgreSQL adapter
 
-# Natural Language Processing
-nltk>=3.8.0
-
-# Security and Validation
-marshmallow>=3.20.0  # Input validation
+# Security
 bcrypt>=4.0.0  # Password hashing
-pyjwt>=2.8.0  # JWT tokens
+python-jose[cryptography]>=3.3.0  # JWT tokens
+passlib[bcrypt]>=1.7.4  # Password hashing
+python-multipart>=0.0.6  # File uploads
 
 # Monitoring and Logging
 prometheus-client>=0.17.0
 structlog>=23.1.0
+sentry-sdk[flask]>=1.30.0  # Error tracking
 
-# Utilities and Performance
+# Utilities
+python-dateutil>=2.8.2
 tqdm>=4.65.0
 psutil>=5.9.0
-python-dotenv>=1.0.0  # Environment variables
 
-# Development and Testing
+# Development
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 black>=23.0.0
+isort>=5.12.0
+mypy>=1.4.0
+pylint>=2.17.0
+pytest-cov>=4.1.0
 flake8>=6.0.0
 mypy>=1.5.0  # Type checking
 
