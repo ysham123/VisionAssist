@@ -2,10 +2,13 @@
 name: VisionAssist CI/CD
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+  # Local-only development: disable automatic CI on push/PR
+  # push:
+  #   branches: [ main, develop ]
+  # pull_request:
+  #   branches: [ main ]
+  # Manual trigger only
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
