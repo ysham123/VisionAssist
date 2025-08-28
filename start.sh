@@ -1,66 +1,61 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# VisionAssist Local Start Script
 
-# Start VisionAssist locally on macOS/Linux
-# - Creates/uses a local virtualenv in ./venv
-# - Installs requirements if needed
-# - Starts the Flask server with production-safe defaults
-# - Opens the app in your default browser once ready
+set -e
 
-APP_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$APP_DIR"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-PYTHON_BIN="python3"
+# Configuration
+PYTHON_CMD="${PYTHON_CMD:-python3}"
 VENV_DIR="venv"
-PORT="5000"
-HOST="127.0.0.1"
+PORT="${PORT:-5000}"
+HOST="${HOST:-127.0.0.1}"
 
-if [ ! -x "$VENV_DIR/bin/python" ]; then
-  echo "[setup] Creating virtual environment in ./$VENV_DIR"
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-  echo "[setup] Upgrading pip"
-  "$VENV_DIR/bin/python" -m pip install -U pip
-  echo "[setup] Installing dependencies"
-  "$VENV_DIR/bin/pip" install -r requirements.txt
+echo -e "${GREEN}🚀 Starting VisionAssist...${NC}"
+
+# Check Python
+if ! command -v $PYTHON_CMD &> /dev/null; then
+    echo -e "${RED}❌ Python 3 is required but not found${NC}"
+    exit 1
 fi
 
-export HOST="$HOST"
-export PORT="$PORT"
-export DEBUG="false"
-export ENVIRONMENT="production"
-# Adjust CORS_ORIGINS if you will open UI from a different origin (not needed for same-origin)
-export CORS_ORIGINS="http://localhost:$PORT,http://127.0.0.1:$PORT"
-
-# If another process is using the port, warn the user
-if lsof -i ":$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "[warn] Port $PORT is already in use. The server may fail to bind."
+# Create/activate virtual environment
+if [ ! -d "$VENV_DIR" ]; then
+    echo -e "${YELLOW}📦 Creating virtual environment...${NC}"
+    $PYTHON_CMD -m venv $VENV_DIR
 fi
 
-# Start server in background, then open browser once health responds
-"$VENV_DIR/bin/python" app.py &
-APP_PID=$!
+# Activate venv
+source $VENV_DIR/bin/activate
 
-cleanup() {
-  echo "\n[stop] Stopping VisionAssist (pid=$APP_PID)"
-  kill "$APP_PID" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT INT TERM
+# Install/update dependencies
+echo -e "${YELLOW}📦 Installing dependencies...${NC}"
+pip install -q --upgrade pip
+pip install -q -r requirements.txt
 
-# Wait for health endpoint (supports legacy /api/v1/health or /health)
-echo "[wait] Waiting for server to become ready on http://$HOST:$PORT ..."
-for i in {1..30}; do
-  if curl -fsS "http://$HOST:$PORT/health" >/dev/null 2>&1 || curl -fsS "http://$HOST:$PORT/api/v1/health" >/dev/null 2>&1; then
-    echo "[ok] Server is ready"
-    if command -v open >/dev/null 2>&1; then
-      open "http://$HOST:$PORT/" || true
-    elif command -v xdg-open >/dev/null 2>&1; then
-      xdg-open "http://$HOST:$PORT/" || true
-    fi
-    break
-  fi
-  sleep 1
-  echo -n "."
-done
+# Check if port is available
+if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo -e "${RED}⚠️  Port $PORT is already in use${NC}"
+    echo "Please stop the other process or use a different port"
+    exit 1
+fi
 
-# Attach to server process
-wait "$APP_PID"
+# Start the application
+echo -e "${GREEN}✅ Starting server on http://$HOST:$PORT${NC}"
+echo -e "${YELLOW}📸 Camera and microphone permissions may be required${NC}"
+echo -e "${YELLOW}Press Ctrl+C to stop the server${NC}"
+echo ""
+
+# Set environment variables
+export FLASK_APP=app.py
+export HOST=$HOST
+export PORT=$PORT
+export DEBUG=false
+export ML_BACKEND_ENABLED=true
+
+# Run the app
+python app.py

@@ -1,233 +1,136 @@
 # VisionAssist 🔊👁️
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
-[![Flask](https://img.shields.io/badge/Flask-2.0%2B-green)](https://flask.palletsprojects.com/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
+AI-powered vision assistant with real-time image captioning and voice interaction.
 
-> An AI-powered vision assistant with natural voice conversation capabilities.
+## Features
 
-VisionAssist is an accessible application that uses computer vision and natural language processing to help users understand their surroundings through AI-generated image descriptions and voice-based conversations.
+- **Real-time Camera Capture** - Automatic 3-second interval image analysis
+- **AI Image Captioning** - BLIP model for accurate scene description
+- **Voice Interaction** - Speech recognition and synthesis for hands-free operation
+- **Conversation Mode** - Context-aware chat with visual understanding
+- **Response Logger** - Track all AI responses and analysis
 
-![VisionAssist Demo](https://github.com/ysham123/VisionAssist/raw/main/static/demo.gif)
+## Quick Start
 
-## ✨ Features
-
-- **Real-time Camera Integration** - Instant access to device camera
-- **AI Image Captioning** - Powered by state-of-the-art BLIP vision model
-- **Natural Voice Conversations** - Ask questions about what you see
-- **Hands-free Operation** - Full voice input and output support
-- **Accessible Interface** - Designed with accessibility in mind
-- **Conversation History** - Review past interactions
-- **Cross-browser Support** - Works on major browsers
-
-## 🚀 Quick Start
-
-### Prerequisites
+### Requirements
 
 - Python 3.8+
-- Web browser with camera and microphone access
-- Internet connection (for initial model download)
+- Modern web browser (Chrome/Edge recommended)
+- Webcam and microphone
 
 ### Installation
 
-1. **Clone and Navigate**:
 ```bash
-git clone https://github.com/ysham123/VisionAssist.git
+# Clone repository
+git clone https://github.com/yourusername/VisionAssist.git
 cd VisionAssist
-```
 
-2. **Install Dependencies**:
-```bash
-pip install -r requirements.txt
-```
-
-3. **Download NLTK Data** (for text processing):
-```python
-import nltk
-nltk.download('punkt')
-nltk.download('stopwords')
-```
-
-4. **Start the Server**:
-```bash
-python server.py
-```
-
-5. **Access the Application**:
-   - Open browser to `http://localhost:5000`
-   - Grant camera permissions for real-time capture
-
-## 🔧 API Documentation
-
-### Core Endpoints
-
-#### Image Captioning
-```http
-POST /api/v1/vision/caption
-Content-Type: application/json
-
-{
-  "image": "data:image/jpeg;base64,/9j/4AAQ...",
-  "include_attention": true,
-  "include_gradcam": false
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "caption": "A person walking down a city street with tall buildings",
-  "source": "ml_model",
-  "model_info": {
-    "architecture": "MobileNet + LSTM with Attention",
-    "feature_extractor": "MobileNetV2",
-    "decoder": "LSTM with Bahdanau Attention"
-  },
-  "attention_weights": [[0.1, 0.3, 0.2, ...]],
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
-#### Advanced Analysis
-```http
-POST /api/v1/vision/analyze
-Content-Type: application/json
-4. The AI will respond both visually and with speech
-
-### Voice Commands
-
-- "What do you see?"
-- "Can you describe this in more detail?"
-- "What color is the [object]?"
-- "How many [objects] are there?"
-- "Where is the [object] located?"
-
-## 🔧 Technical Architecture
-
-### Frontend
-
-- **Interface**: HTML5, CSS3, JavaScript
-- **Camera Access**: WebRTC API
-- **Voice Input**: Web Speech API (SpeechRecognition)
-- **Voice Output**: Web Speech API (SpeechSynthesis)
-
-### Backend
-
-- **Server**: Flask (Python)
-- **Image Captioning**: BLIP model (Transformers)
-- **Conversation**: LLM-based response generation
-- **Image Processing**: PIL/OpenCV
-
-## 🌐 Browser Compatibility
-
-| Browser | Camera | Voice Input | Voice Output |
-|---------|--------|-------------|-------------|
-| Chrome  | ✅     | ✅          | ✅          |
-| Edge    | ✅     | ✅          | ✅          |
-| Firefox | ✅     | ⚠️ Limited  | ✅          |
-| Safari  | ✅     | ⚠️ Limited  | ✅          |
-
-## ⚠️ Troubleshooting
-
-- **Microphone Access**: Ensure you grant microphone permissions when prompted
-- **Camera Access**: Ensure you grant camera permissions when prompted
-- **Speech Recognition Errors**: If you encounter network errors, check your internet connection
-- **No Sound**: Check that your device's volume is turned up and not muted
-- **Model Loading**: First-time startup may take longer as models are downloaded
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-
-
----
-
-# Local-only Quick Start (Updated)
-
-This project is configured for local development only. CI/CD is disabled and the app runs same-origin by default.
-
-## Requirements
-- Python 3.10+ (3.11 recommended)
-- macOS/Linux shell
-
-## Setup and Run
-1) Install deps
-```bash
-pip install -r requirements.txt
-```
-
-2) Start locally (recommended script)
-```bash
+# Run the start script
+chmod +x start.sh
 ./start.sh
 ```
-This script creates a venv, installs requirements, starts the server, and opens the browser.
 
-Alternate:
+Or manually:
+
 ```bash
-python server.py
-# or
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the application
 python app.py
 ```
 
-3) Open the app
-- http://localhost:5000
+### Access the Application
 
-Notes:
-- Frontend uses same-origin API by default. `static/vision.js` falls back to `''` if `window.APP_CONFIG.apiBaseUrl` is not set.
-- No authentication. CORS is permissive for local.
+1. Open browser to `http://localhost:5000`
+2. Allow camera and microphone permissions
+3. The app will automatically start capturing and analyzing images
+
+## Usage
+
+### Auto-Capture Mode (Default)
+- Images are automatically captured every 3 seconds
+- AI captions appear in real-time
+- All responses are logged in the timeline
+
+### Voice Mode
+- Click the microphone button to enable voice interaction
+- Speak naturally to ask questions about what the camera sees
+- Responses are spoken back and logged
+
+### Manual Controls
+- **Pause/Resume** - Toggle auto-capture
+- **Clear Log** - Clear the response timeline
+- **Export Log** - Download responses as JSON
 
 ## API Endpoints
-- POST `/api/v1/vision/caption`
-  - Body JSON:
-    ```json
-    {
-      "image": "data:image/png;base64,....",
-      "include_attention": false,
-      "include_gradcam": false
-    }
-    ```
-  - Returns `{ success: true, caption: "...", ... }` with a graceful fallback if ML backend is unavailable.
 
-- POST `/api/v1/vision/analyze`
-  - Same body as above; may include attention/gradcam details if available.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/vision/caption` | POST | Generate image caption |
+| `/api/v1/vision/analyze` | POST | Detailed image analysis |
+| `/api/v1/conversation/sessions` | POST | Create chat session |
+| `/api/v1/conversation/chat` | POST | Send chat message |
 
-- POST `/api/v1/conversation/sessions`
-  - Empty body allowed. Returns `{ success: true, session_id: "..." }`.
+### Example Request
 
-- POST `/api/v1/conversation/chat`
-  - Body JSON typically `{ session_id, message, [image] }`.
-
-## Content Security Policy (CSP)
-Set via `app.py` using Flask-Talisman. Allows Google Fonts and nonce-based scripts.
-
-Effective policy:
-```python
-content_security_policy = {
-  'default-src': "'self'",
-  'img-src': ["'self'", 'data:', 'blob:'],
-  'media-src': ["'self'"],
-  'script-src': ["'self'"],  # nonce added automatically by Talisman
-  'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-  'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:']
-}
+```bash
+curl -X POST http://localhost:5000/api/v1/vision/caption \
+  -H "Content-Type: application/json" \
+  -d '{"image": "data:image/jpeg;base64,..."}'
 ```
-Tip: Move inline scripts/styles into external files to remove `'unsafe-inline'` for production.
+
+## Configuration
+
+Create a `.env` file based on `.env.example`:
+
+```env
+HOST=127.0.0.1
+PORT=5000
+DEBUG=false
+ML_BACKEND_ENABLED=true
+```
 
 ## Troubleshooting
-- 400 on vision endpoints: ensure `Content-Type: application/json` and body contains `image` data URL/base64.
-- 500 on session creation: empty body is allowed; check logs if `services/conversation_service.py` throws.
-- CSP blocking scripts: inline tags must receive the nonce or be external files.
 
-## Notes
-- CI/CD workflow is disabled; manual `workflow_dispatch` remains in `.github/workflows/ci-cd.yml`.
-- ML backend falls back to a safe caption in local dev when the model isn’t available.
+### Camera Not Working
+- Check browser permissions for camera access
+- Ensure no other app is using the camera
+- Try refreshing the page
 
+### Voice Recognition Issues
+- Use Chrome or Edge for best compatibility
+- Check microphone permissions
+- Ensure microphone is not muted
+
+### ML Model Not Loading
+- First run may take time to download models
+- Check internet connection for model download
+- Verify sufficient disk space (~1GB for models)
+
+## Browser Support
+
+| Feature | Chrome | Edge | Firefox | Safari |
+|---------|--------|------|---------|--------|
+| Camera | ✅ | ✅ | ✅ | ✅ |
+| Voice Input | ✅ | ✅ | ⚠️ | ⚠️ |
+| Voice Output | ✅ | ✅ | ✅ | ✅ |
+
+## Performance Tips
+
+- Use GPU if available (automatically detected)
+- Close other camera-using applications
+- Use good lighting for better image analysis
+- Keep browser tabs to minimum for best performance
+
+## License
+
+MIT License - See LICENSE file for details
+
+## Support
+
+For issues or questions, please open an issue on GitHub.

@@ -1,113 +1,50 @@
 """
-VisionAssist Configuration Management
-Centralized configuration with environment variable support and validation
+VisionAssist Configuration
+Simplified configuration for local development
 """
 import os
-import secrets
-from typing import Dict, Any, List, Optional
-from pydantic import HttpUrl, validator
-from pydantic_settings import BaseSettings
 from pathlib import Path
 
-class Settings(BaseSettings):
-    """Application settings with validation"""
+class Config:
+    """Simple configuration class"""
     
-    # Server settings
-    HOST: str = '0.0.0.0'
-    PORT: int = 5000
-    DEBUG: bool = True
-    ENVIRONMENT: str = 'development'
+    # Server
+    HOST = os.getenv('HOST', '127.0.0.1')
+    PORT = int(os.getenv('PORT', 5000))
+    DEBUG = os.getenv('DEBUG', 'true').lower() == 'true'
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-key-change-in-production-' + os.urandom(16).hex())
     
-    # Security (simplified for local testing)
-    SECRET_KEY: str = 'dev-key-for-testing-only'
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours for testing
-    CORS_ORIGINS: List[str] = ['*']  # Allow all origins for local testing
+    # CORS
+    CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').split(',')
     
-    # File uploads
-    MAX_CONTENT_LENGTH: int = 16 * 1024 * 1024  # 16MB
-    ALLOWED_EXTENSIONS: List[str] = ['png', 'jpg', 'jpeg', 'gif']
+    # File Upload
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
     
-    # ML Backend (optimized for local testing)
-    ML_BACKEND_ENABLED: bool = True
-    MODEL_CACHE_DIR: str = './models'
-    GPU_ENABLED: bool = False
-    USE_MOCK_RESPONSES: bool = True  # Enable mock responses for testing
-    
-    # Database (not required for local testing)
-    DATABASE_URL: str = 'sqlite:///./test.db'
+    # ML Backend
+    ML_BACKEND_ENABLED = os.getenv('ML_BACKEND_ENABLED', 'true').lower() == 'true'
+    MODEL_CACHE_DIR = Path('./models')
+    MODEL_CACHE_DIR.mkdir(exist_ok=True)
+    USE_GPU = torch.cuda.is_available() if 'torch' in locals() else False
     
     # API
-    API_PREFIX: str = '/api/v1'
-    API_VERSION: str = '1.0.0'
+    API_VERSION = '1.0.0'
     
     # Logging
-    LOG_LEVEL: str = 'INFO'
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     
-    class Config:
-        env_file = '.env'
-        env_file_encoding = 'utf-8'
-        case_sensitive = True
+    # Rate Limiting
+    RATE_LIMIT_ENABLED = os.getenv('RATE_LIMIT_ENABLED', 'false').lower() == 'true'
     
-    @validator('SECRET_KEY', pre=True)
-    def validate_secret_key(cls, v: str) -> str:
-        if not v:
-            if os.getenv('ENVIRONMENT') == 'production':
-                raise ValueError('SECRET_KEY must be set in production')
-            return 'dev-key-for-testing-only-1234567890123456'  # 32+ chars for local dev
-        return v
-    
-    @validator('CORS_ORIGINS', pre=True)
-    def validate_cors_origins(cls, v: str) -> List[str]:
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(',') if origin.strip()]
-        return v or []
-    
-    @validator('MODEL_CACHE_DIR')
-    def validate_model_cache_dir(cls, v: str) -> str:
-        path = Path(v)
-        path.mkdir(parents=True, exist_ok=True)
-        if not os.access(path, os.W_OK):
-            raise ValueError(f'Cannot write to model cache directory: {v}')
-        return str(path.absolute())
+    @classmethod
+    def validate(cls):
+        """Basic validation"""
+        issues = []
+        if not cls.SECRET_KEY or 'dev-key' in cls.SECRET_KEY:
+            issues.append('Using development SECRET_KEY')
+        if '*' in cls.CORS_ORIGINS:
+            issues.append('CORS allows all origins')
+        return {'valid': len(issues) == 0, 'issues': issues}
 
-# Initialize settings
-config = Settings()
-
-def validate_config() -> Dict[str, Any]:
-    """Validate configuration and return status"""
-    issues = []
-    
-    if config.DEBUG and config.ENVIRONMENT == 'production':
-        issues.append('Debug mode enabled in production environment')
-    
-    if not config.SECRET_KEY or config.SECRET_KEY == 'dev-key-change-in-production':
-        issues.append('Using default or empty SECRET_KEY in production')
-    
-    if '*' in config.CORS_ORIGINS:
-        issues.append('CORS allows all origins - security risk')
-    
-    return {
-        'valid': len(issues) == 0,
-        'issues': issues,
-        'environment': config.ENVIRONMENT,
-        'debug': config.DEBUG,
-        'cors_origins': config.CORS_ORIGINS
-    }
-    
-    if config.DEBUG and os.getenv('ENVIRONMENT') == 'production':
-        issues.append("DEBUG mode enabled in production environment")
-    
-    if '*' in config.CORS_ORIGINS:
-        issues.append("CORS allows all origins - security risk")
-    
-    return {
-        'valid': len(issues) == 0,
-        'issues': issues,
-        'config': {
-            'host': config.HOST,
-            'port': config.PORT,
-            'debug': config.DEBUG,
-            'ml_backend_enabled': config.ML_BACKEND_ENABLED,
-            'cors_origins': config.cors_origins_list
-        }
-    }
+# Single config instance
+config = Config()
