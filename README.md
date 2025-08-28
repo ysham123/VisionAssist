@@ -22,7 +22,7 @@ AI-powered vision assistant with real-time image captioning and voice interactio
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/VisionAssist.git
+git clone https://github.com/ysham123/VisionAssist.git
 cd VisionAssist
 
 # Run the start script
